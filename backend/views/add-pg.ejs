@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add New PG - Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .form-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+        .form-header {
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 1rem;
+            margin-bottom: 2rem;
+        }
+        .btn-custom {
+            padding: 0.75rem 2rem;
+            border-radius: 5px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 d-md-block bg-dark sidebar">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link text-light" href="/admin/dashboard">
+                                <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-light" href="/admin/hostels">
+                                <i class="fas fa-building me-2"></i>Hostels
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-light" href="/admin/pgs">
+                                <i class="fas fa-home me-2"></i>PGs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-light" href="/admin/students">
+                                <i class="fas fa-users me-2"></i>Students
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-light" href="/admin/allotments">
+                                <i class="fas fa-list me-2"></i>Allotments
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-light" href="/admin/bookings">
+                                <i class="fas fa-calendar me-2"></i>Bookings
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">
+                        <i class="fas fa-plus-circle me-2"></i>Add New PG
+                    </h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <a href="/admin/pgs" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to PGs
+                        </a>
+                    </div>
+                </div>
+
+                <div class="form-container">
+                    <div class="form-header">
+                        <h3>PG Information</h3>
+                        <p class="text-muted">Fill in the details below to add a new PG</p>
+                    </div>
+
+                    <form id="pgForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="pgName" class="form-label">PG Name *</label>
+                                    <input type="text" class="form-control" id="pgName" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="pgArea" class="form-label">Area *</label>
+                                    <select class="form-select" id="pgArea" required>
+                                        <option value="">Select Area</option>
+                                        <option value="Bhadurgarh">Bhadurgarh</option>
+                                        <option value="Phase 1">Phase 1</option>
+                                        <option value="Phase 2">Phase 2</option>
+                                        <option value="Near PUP">Near PUP</option>
+                                        <option value="Patiala City">Patiala City</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="pgPrice" class="form-label">Price per Month (₹) *</label>
+                                    <input type="number" class="form-control" id="pgPrice" min="0" step="0.01" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="pgSpots" class="form-label">Available Spots *</label>
+                                    <input type="number" class="form-control" id="pgSpots" min="0" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="pgGender" class="form-label">Gender Preference *</label>
+                                    <select class="form-select" id="pgGender" required>
+                                        <option value="">Select Gender</option>
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                        <option value="Mixed">Mixed</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="pgStatus" class="form-label">Status</label>
+                                    <select class="form-select" id="pgStatus">
+                                        <option value="1">Active</option>
+                                        <option value="0">Inactive</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="pgDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="pgDescription" rows="3" placeholder="Describe the PG facilities and environment"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="pgAmenities" class="form-label">Amenities</label>
+                            <textarea class="form-control" id="pgAmenities" rows="2" placeholder="e.g., WiFi, AC, Laundry, Parking, Security, Kitchen"></textarea>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="pgContact" class="form-label">Contact Number</label>
+                                    <input type="tel" class="form-control" id="pgContact" placeholder="+91 9876543210">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="pgLocation" class="form-label">Location</label>
+                                    <input type="text" class="form-control" id="pgLocation" placeholder="e.g., Near Bus Stand">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="pgAddress" class="form-label">Full Address</label>
+                            <textarea class="form-control" id="pgAddress" rows="2" placeholder="Complete address with landmark"></textarea>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="/admin/pgs" class="btn btn-secondary btn-custom">
+                                <i class="fas fa-times me-2"></i>Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary btn-custom">
+                                <i class="fas fa-save me-2"></i>Save PG
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Data attributes for EJS variables -->
+    <div id="page-data" 
+         data-api-base-url="<%= apiBaseUrl %>" 
+         style="display: none;">
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/admin/js/add-pg.js"></script>
+</body>
+</html>

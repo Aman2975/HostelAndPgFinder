@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Purple Theme Colors -->
+    <color name="purple_light">#FFB39DDB</color>
+    <color name="purple">#FF7B1FA2</color>
+    <color name="purple_dark">#FF4A148C</color>
+    
+    <!-- Purple Grey Theme Colors -->
+    <color name="purple_grey_light">#FF9575CD</color>
+    <color name="purple_grey">#FF512DA8</color>
+    <color name="purple_grey_dark">#FF311B92</color>
+    
+    <!-- Pink Theme Colors -->
+    <color name="pink_light">#FFF8BBD9</color>
+    <color name="pink">#FFC2185B</color>
+    <color name="pink_dark">#FF880E4F</color>
+    
+    <!-- Background Colors -->
+    <color name="light_purple_bg">#FFF3E5F5</color>
+    <color name="light_pink_bg">#FFFCE4EC</color>
+    
+    <!-- Basic Colors -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="gray_light">#FFF5F5F5</color>
+    <color name="gray_medium">#FF424242</color>
+</resources>
