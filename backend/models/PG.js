@@ -1,4 +1,4 @@
-const { query, get, run } = require('../config/sqlite-database');
+const { db } = require('../config/firebase');
 
 class PG {
     constructor(data) {
@@ -20,38 +20,43 @@ class PG {
     // Get all PGs
     static async getAll(filters = {}) {
         try {
-            let sqlQuery = 'SELECT * FROM pgs WHERE is_active = 1';
-            const values = [];
+            const snapshot = await db.collection('pgs').get();
+            let pgs = [];
 
-            // Apply filters
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.is_active !== 0 && data.is_active !== false) {
+                    pgs.push({
+                        id: doc.id,
+                        ...data,
+                        available_spots: Number(data.available_spots || 0),
+                        total_spots: Number(data.total_spots || 0),
+                        price_per_month: data.price_per_month !== undefined ? String(data.price_per_month) : "0"
+                    });
+                }
+            });
+
             if (filters.area) {
-                sqlQuery += ' AND area = ?';
-                values.push(filters.area);
+                pgs = pgs.filter(p => p.area && p.area.toLowerCase() === filters.area.toLowerCase());
             }
 
             if (filters.gender) {
-                sqlQuery += ' AND (gender_preference = ? OR gender_preference = "Unisex")';
-                values.push(filters.gender);
+                pgs = pgs.filter(p => p.gender_preference && (p.gender_preference.toLowerCase() === filters.gender.toLowerCase() || p.gender_preference.toLowerCase() === 'unisex' || p.gender_preference.toLowerCase() === 'both'));
             }
 
-            if (filters.min_price) {
-                sqlQuery += ' AND price_per_month >= ?';
-                values.push(filters.min_price);
+            if (filters.min_price !== undefined) {
+                pgs = pgs.filter(p => parseFloat(p.price_per_month || 0) >= filters.min_price);
             }
 
-            if (filters.max_price) {
-                sqlQuery += ' AND price_per_month <= ?';
-                values.push(filters.max_price);
+            if (filters.max_price !== undefined) {
+                pgs = pgs.filter(p => parseFloat(p.price_per_month || 0) <= filters.max_price);
             }
 
             if (filters.available_spots) {
-                sqlQuery += ' AND available_spots > 0';
+                pgs = pgs.filter(p => Number(p.available_spots || 0) > 0);
             }
 
-            sqlQuery += ' ORDER BY created_at DESC';
-
-            const rows = await query(sqlQuery, values);
-            return rows;
+            return pgs;
         } catch (error) {
             throw new Error(`Error getting PGs: ${error.message}`);
         }
@@ -60,9 +65,20 @@ class PG {
     // Get PG by ID
     static async getById(id) {
         try {
-            const sqlQuery = 'SELECT * FROM pgs WHERE id = ?';
-            const row = await get(sqlQuery, [id]);
-            return row || null;
+            const doc = await db.collection('pgs').doc(String(id)).get();
+            if (doc.exists) {
+                return { id: doc.id, ...doc.data() };
+            }
+
+            const snapshot = await db.collection('pgs').get();
+            let found = null;
+            snapshot.forEach(d => {
+                const data = d.data();
+                if (d.id === String(id) || String(data.id) === String(id)) {
+                    found = { id: d.id, ...data };
+                }
+            });
+            return found;
         } catch (error) {
             throw new Error(`Error getting PG: ${error.message}`);
         }
@@ -71,9 +87,7 @@ class PG {
     // Get PGs by area
     static async getByArea(area) {
         try {
-            const sqlQuery = 'SELECT * FROM pgs WHERE area = ? AND is_active = 1 ORDER BY created_at DESC';
-            const rows = await query(sqlQuery, [area]);
-            return rows;
+            return await this.getAll({ area });
         } catch (error) {
             throw new Error(`Error getting PGs by area: ${error.message}`);
         }
@@ -82,28 +96,25 @@ class PG {
     // Create new PG
     static async create(pgData) {
         try {
-            const sqlQuery = `
-                INSERT INTO pgs (name, area, location, available_spots, total_spots, 
-                               price_per_month, gender_preference, amenities, contact_number, description, image_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `;
-            
-            const values = [
-                pgData.name,
-                pgData.area,
-                pgData.location,
-                pgData.available_spots || 0,
-                pgData.total_spots || 0,
-                pgData.price_per_month,
-                pgData.gender_preference || 'Unisex',
-                pgData.amenities,
-                pgData.contact_number,
-                pgData.description,
-                pgData.image_url
-            ];
+            const dataToSave = {
+                name: pgData.name || '',
+                area: pgData.area || '',
+                location: pgData.location || '',
+                available_spots: Number(pgData.available_spots || 0),
+                total_spots: Number(pgData.total_spots || 0),
+                price_per_month: String(pgData.price_per_month || 0),
+                gender_preference: pgData.gender_preference || 'Both',
+                amenities: pgData.amenities || '',
+                contact_number: pgData.contact_number || '',
+                description: pgData.description || '',
+                image_url: pgData.image_url || '',
+                is_active: pgData.is_active !== undefined ? pgData.is_active : 1,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
 
-            const result = await run(sqlQuery, values);
-            return { id: result.insertId, ...pgData };
+            const docRef = await db.collection('pgs').add(dataToSave);
+            return { id: docRef.id, ...dataToSave };
         } catch (error) {
             throw new Error(`Error creating PG: ${error.message}`);
         }
@@ -112,42 +123,37 @@ class PG {
     // Update PG
     static async update(id, updateData) {
         try {
-            const allowedFields = [
-                'name', 'area', 'location', 'available_spots', 'total_spots',
-                'price_per_month', 'gender_preference', 'amenities', 
-                'contact_number', 'description', 'image_url'
-            ];
-            
-            const updateFields = [];
-            const values = [];
+            const pg = await this.getById(id);
+            if (!pg) return false;
 
-            for (const [key, value] of Object.entries(updateData)) {
-                if (allowedFields.includes(key) && value !== undefined) {
-                    updateFields.push(`${key} = ?`);
-                    values.push(value);
-                }
-            }
+            const docRef = db.collection('pgs').doc(pg.id);
+            const dataToUpdate = {
+                ...updateData,
+                updated_at: new Date().toISOString()
+            };
 
-            if (updateFields.length === 0) {
-                throw new Error('No valid fields to update');
-            }
+            if (dataToUpdate.available_spots !== undefined) dataToUpdate.available_spots = Number(dataToUpdate.available_spots);
+            if (dataToUpdate.total_spots !== undefined) dataToUpdate.total_spots = Number(dataToUpdate.total_spots);
+            if (dataToUpdate.price_per_month !== undefined) dataToUpdate.price_per_month = String(dataToUpdate.price_per_month);
 
-            values.push(id);
-            const sqlQuery = `UPDATE pgs SET ${updateFields.join(', ')}, updated_at = datetime('now') WHERE id = ?`;
-            
-            const result = await run(sqlQuery, values);
-            return result.changes > 0;
+            await docRef.update(dataToUpdate);
+            return true;
         } catch (error) {
             throw new Error(`Error updating PG: ${error.message}`);
         }
     }
 
-    // Delete PG (soft delete)
+    // Delete PG
     static async delete(id) {
         try {
-            const sqlQuery = 'UPDATE pgs SET is_active = 0 WHERE id = ?';
-            const result = await run(sqlQuery, [id]);
-            return result.changes > 0;
+            const pg = await this.getById(id);
+            if (!pg) return false;
+
+            await db.collection('pgs').doc(pg.id).update({
+                is_active: 0,
+                updated_at: new Date().toISOString()
+            });
+            return true;
         } catch (error) {
             throw new Error(`Error deleting PG: ${error.message}`);
         }
@@ -156,38 +162,14 @@ class PG {
     // Search PGs
     static async search(searchTerm, filters = {}) {
         try {
-            let sqlQuery = `
-                SELECT * FROM pgs 
-                WHERE is_active = 1 
-                AND (name LIKE ? OR location LIKE ? OR area LIKE ? OR description LIKE ?)
-            `;
-            const values = [`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`];
-
-            // Apply additional filters
-            if (filters.area) {
-                sqlQuery += ' AND area = ?';
-                values.push(filters.area);
-            }
-
-            if (filters.gender) {
-                sqlQuery += ' AND (gender_preference = ? OR gender_preference = "Unisex")';
-                values.push(filters.gender);
-            }
-
-            if (filters.min_price) {
-                sqlQuery += ' AND price_per_month >= ?';
-                values.push(filters.min_price);
-            }
-
-            if (filters.max_price) {
-                sqlQuery += ' AND price_per_month <= ?';
-                values.push(filters.max_price);
-            }
-
-            sqlQuery += ' ORDER BY created_at DESC';
-
-            const rows = await query(sqlQuery, values);
-            return rows;
+            const pgs = await this.getAll(filters);
+            const term = searchTerm.toLowerCase();
+            return pgs.filter(p =>
+                (p.name && p.name.toLowerCase().includes(term)) ||
+                (p.location && p.location.toLowerCase().includes(term)) ||
+                (p.area && p.area.toLowerCase().includes(term)) ||
+                (p.description && p.description.toLowerCase().includes(term))
+            );
         } catch (error) {
             throw new Error(`Error searching PGs: ${error.message}`);
         }
@@ -196,9 +178,9 @@ class PG {
     // Get available areas
     static async getAreas() {
         try {
-            const sqlQuery = 'SELECT DISTINCT area FROM pgs WHERE is_active = 1 ORDER BY area';
-            const rows = await query(sqlQuery, []);
-            return rows.map(row => row.area);
+            const pgs = await this.getAll();
+            const areas = [...new Set(pgs.map(p => p.area).filter(Boolean))];
+            return areas.sort();
         } catch (error) {
             throw new Error(`Error getting areas: ${error.message}`);
         }
@@ -207,9 +189,9 @@ class PG {
     // Get gender preferences
     static async getGenderPreferences() {
         try {
-            const sqlQuery = 'SELECT DISTINCT gender_preference FROM pgs WHERE is_active = 1 ORDER BY gender_preference';
-            const rows = await query(sqlQuery, []);
-            return rows.map(row => row.gender_preference);
+            const pgs = await this.getAll();
+            const prefs = [...new Set(pgs.map(p => p.gender_preference).filter(Boolean))];
+            return prefs.sort();
         } catch (error) {
             throw new Error(`Error getting gender preferences: ${error.message}`);
         }

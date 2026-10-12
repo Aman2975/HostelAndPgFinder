@@ -46,7 +46,7 @@ backend/
 │       └── admin-bookings.js
 ├── database/
 │   └── hostel_pg_finder.db         # SQLite database file (auto-created)
-├── server-sqlite.js                # Main server file (START HERE!)
+├── server.js                       # Main server file (START HERE!)
 └── package.json                    # Dependencies & scripts
 ```
 
@@ -90,8 +90,8 @@ app/src/main/
 # Navigate to backend directory
 cd backend
 
-# Start the SQLite server
-node server-sqlite.js
+# Start the server
+node server.js
 ```
 
 ### **Method 2: Using npm script**

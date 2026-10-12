@@ -1,14 +1,13 @@
 const express = require('express');
-const { query, get, run } = require('../config/sqlite-database');
+const Hostel = require('../models/Hostel');
+const PG = require('../models/PG');
+const { db } = require('../config/firebase');
 const router = express.Router();
 
-// Hostel management routes
 // Get all hostels for admin
 router.get('/hostels', async (req, res) => {
     try {
-        const sql = 'SELECT * FROM hostels ORDER BY created_at DESC';
-        const hostels = await query(sql);
-        
+        const hostels = await Hostel.getAll();
         res.json({
             success: true,
             data: hostels
@@ -22,43 +21,19 @@ router.get('/hostels', async (req, res) => {
 // Add new hostel
 router.post('/hostels', async (req, res) => {
     try {
-        const {
-            name,
-            area,
-            location,
-            price_per_month,
-            total_rooms,
-            available_rooms,
-            amenities,
-            contact_number,
-            description,
-            is_active = 1
-        } = req.body;
-
-        // Basic validation
-        if (!name || !area || !location || !price_per_month || !total_rooms || !available_rooms) {
+        const hostelData = req.body;
+        if (!hostelData.name || !hostelData.area || !hostelData.location || !hostelData.price_per_month) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'Name, area, location, price, total rooms, and available rooms are required' 
+                message: 'Name, area, location, and price are required'
             });
         }
 
-        const sql = `
-            INSERT INTO hostels (
-                name, area, location, price_per_month, total_rooms, available_rooms,
-                amenities, contact_number, description, is_active, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        `;
-        
-        const result = await run(sql, [
-            name, area, location, price_per_month, total_rooms, available_rooms,
-            amenities, contact_number, description, is_active
-        ]);
-
+        const newHostel = await Hostel.create(hostelData);
         res.status(201).json({
             success: true,
             message: 'Hostel added successfully',
-            data: { id: result.lastID }
+            data: { id: newHostel.id, hostel: newHostel }
         });
     } catch (error) {
         console.error('Error adding hostel:', error);
@@ -70,33 +45,10 @@ router.post('/hostels', async (req, res) => {
 router.put('/hostels/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const {
-            name,
-            area,
-            location,
-            price_per_month,
-            total_rooms,
-            available_rooms,
-            amenities,
-            contact_number,
-            description,
-            is_active
-        } = req.body;
+        const updateData = req.body;
 
-        const sql = `
-            UPDATE hostels 
-            SET name = ?, area = ?, location = ?, price_per_month = ?, 
-                total_rooms = ?, available_rooms = ?, amenities = ?, 
-                contact_number = ?, description = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `;
-        
-        const result = await run(sql, [
-            name, area, location, price_per_month, total_rooms, available_rooms,
-            amenities, contact_number, description, is_active, id
-        ]);
-
-        if (result.changes === 0) {
+        const updated = await Hostel.update(id, updateData);
+        if (!updated) {
             return res.status(404).json({ success: false, message: 'Hostel not found' });
         }
 
@@ -114,11 +66,9 @@ router.put('/hostels/:id', async (req, res) => {
 router.delete('/hostels/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        
-        const sql = 'DELETE FROM hostels WHERE id = ?';
-        const result = await run(sql, [id]);
-        
-        if (result.changes === 0) {
+        const deleted = await Hostel.delete(id);
+
+        if (!deleted) {
             return res.status(404).json({ success: false, message: 'Hostel not found' });
         }
 
@@ -132,13 +82,10 @@ router.delete('/hostels/:id', async (req, res) => {
     }
 });
 
-// PG management routes
 // Get all PGs for admin
 router.get('/pgs', async (req, res) => {
     try {
-        const sql = 'SELECT * FROM pgs ORDER BY created_at DESC';
-        const pgs = await query(sql);
-        
+        const pgs = await PG.getAll();
         res.json({
             success: true,
             data: pgs
@@ -152,44 +99,19 @@ router.get('/pgs', async (req, res) => {
 // Add new PG
 router.post('/pgs', async (req, res) => {
     try {
-        const {
-            name,
-            area,
-            location,
-            price_per_month,
-            total_spots,
-            available_spots,
-            gender_preference,
-            amenities,
-            contact_number,
-            description,
-            is_active = 1
-        } = req.body;
-
-        // Basic validation
-        if (!name || !area || !location || !price_per_month || !total_spots || !available_spots) {
+        const pgData = req.body;
+        if (!pgData.name || !pgData.area || !pgData.location || !pgData.price_per_month) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'Name, area, location, price, total spots, and available spots are required' 
+                message: 'Name, area, location, and price are required'
             });
         }
 
-        const sql = `
-            INSERT INTO pgs (
-                name, area, location, price_per_month, total_spots, available_spots,
-                gender_preference, amenities, contact_number, description, is_active, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        `;
-        
-        const result = await run(sql, [
-            name, area, location, price_per_month, total_spots, available_spots,
-            gender_preference, amenities, contact_number, description, is_active
-        ]);
-
+        const newPG = await PG.create(pgData);
         res.status(201).json({
             success: true,
             message: 'PG added successfully',
-            data: { id: result.lastID }
+            data: { id: newPG.id, pg: newPG }
         });
     } catch (error) {
         console.error('Error adding PG:', error);
@@ -201,34 +123,10 @@ router.post('/pgs', async (req, res) => {
 router.put('/pgs/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const {
-            name,
-            area,
-            location,
-            price_per_month,
-            total_spots,
-            available_spots,
-            gender_preference,
-            amenities,
-            contact_number,
-            description,
-            is_active
-        } = req.body;
+        const updateData = req.body;
 
-        const sql = `
-            UPDATE pgs 
-            SET name = ?, area = ?, location = ?, price_per_month = ?, 
-                total_spots = ?, available_spots = ?, gender_preference = ?, 
-                amenities = ?, contact_number = ?, description = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `;
-        
-        const result = await run(sql, [
-            name, area, location, price_per_month, total_spots, available_spots,
-            gender_preference, amenities, contact_number, description, is_active, id
-        ]);
-
-        if (result.changes === 0) {
+        const updated = await PG.update(id, updateData);
+        if (!updated) {
             return res.status(404).json({ success: false, message: 'PG not found' });
         }
 
@@ -246,11 +144,9 @@ router.put('/pgs/:id', async (req, res) => {
 router.delete('/pgs/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        
-        const sql = 'DELETE FROM pgs WHERE id = ?';
-        const result = await run(sql, [id]);
-        
-        if (result.changes === 0) {
+        const deleted = await PG.delete(id);
+
+        if (!deleted) {
             return res.status(404).json({ success: false, message: 'PG not found' });
         }
 
@@ -267,19 +163,23 @@ router.delete('/pgs/:id', async (req, res) => {
 // Get property statistics
 router.get('/stats', async (req, res) => {
     try {
-        const hostelsSql = 'SELECT COUNT(*) as total_hostels, SUM(available_rooms) as total_available_rooms FROM hostels WHERE is_active = 1';
-        const pgsSql = 'SELECT COUNT(*) as total_pgs, SUM(available_spots) as total_available_spots FROM pgs WHERE is_active = 1';
-        
-        const [hostelsStats, pgsStats] = await Promise.all([
-            get(hostelsSql),
-            get(pgsSql)
-        ]);
-        
+        const hostels = await Hostel.getAll();
+        const pgs = await PG.getAll();
+
+        const totalAvailableRooms = hostels.reduce((sum, h) => sum + Number(h.available_rooms || 0), 0);
+        const totalAvailableSpots = pgs.reduce((sum, p) => sum + Number(p.available_spots || 0), 0);
+
         res.json({
             success: true,
             data: {
-                hostels: hostelsStats,
-                pgs: pgsStats
+                hostels: {
+                    total_hostels: hostels.length,
+                    total_available_rooms: totalAvailableRooms
+                },
+                pgs: {
+                    total_pgs: pgs.length,
+                    total_available_spots: totalAvailableSpots
+                }
             }
         });
     } catch (error) {
@@ -289,4 +189,3 @@ router.get('/stats', async (req, res) => {
 });
 
 module.exports = router;
-

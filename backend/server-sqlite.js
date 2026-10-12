@@ -199,7 +199,14 @@ const startServer = async () => {
         
         // Initialize database
         await initializeDatabase();
-        
+
+        // Initialize and seed Firebase Firestore
+        try {
+            require('./seed-firebase');
+        } catch (fbErr) {
+            console.log('⚠️ Firebase seeding notice:', fbErr.message);
+        }
+
         // Start server on all interfaces
         app.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Server running on port ${PORT}`);
@@ -207,7 +214,7 @@ const startServer = async () => {
             console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
             console.log(`🌐 Wireless Access: http://10.230.118.182:${PORT}/admin`);
             console.log(`🌐 API Access: http://10.230.118.182:${PORT}/api`);
-            console.log(`💾 Database: SQLite`);
+            console.log(`🔥 Database: Firebase Firestore`);
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error.message);

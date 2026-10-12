@@ -1,23 +1,40 @@
 const express = require('express');
-const { query, get, run } = require('../config/sqlite-database');
+const { db } = require('../config/firebase');
 const router = express.Router();
+
+// Helper function to format user doc
+function formatStudent(doc) {
+    const data = doc.data();
+    return {
+        id: doc.id,
+        student_id: data.studentId || data.student_id || 'N/A',
+        name: data.name || data.fullName || 'Unknown Student',
+        email: data.email || 'N/A',
+        phone: data.phone || data.contact || 'N/A',
+        course: data.course || 'N/A',
+        academic_year: data.academicYear || data.academic_year || 'N/A',
+        gender: data.gender || 'N/A',
+        university: data.university || 'N/A',
+        created_at: data.created_at ? (data.created_at.toDate ? data.created_at.toDate().toISOString() : data.created_at) : new Date().toISOString()
+    };
+}
 
 // Get all students
 router.get('/', async (req, res) => {
     try {
-        console.log('Admin students route called - fetching from database...');
-        const sql = `
-            SELECT id, student_id, name, email, phone, course, academic_year, 
-                   gender, university, created_at, updated_at
-            FROM students 
-            ORDER BY created_at DESC
-        `;
-        const students = await query(sql);
-        console.log(`Found ${students.length} students in database`);
-        
+        const snapshot = await db.collection('users').get();
+        const students = [];
+
+        snapshot.forEach(doc => {
+            students.push(formatStudent(doc));
+        });
+
+        // Sort by created_at descending
+        students.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
         res.json({
             success: true,
-            data: { students: students },
+            data: { students },
             count: students.length
         });
     } catch (error) {
@@ -30,19 +47,15 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const sql = 'SELECT * FROM students WHERE id = ?';
-        const student = await get(sql, [id]);
-        
-        if (!student) {
+        const doc = await db.collection('users').doc(id).get();
+
+        if (!doc.exists) {
             return res.status(404).json({ success: false, message: 'Student not found' });
         }
-        
-        // Remove password from response
-        const { password, ...studentData } = student;
-        
+
         res.json({
             success: true,
-            data: studentData
+            data: formatStudent(doc)
         });
     } catch (error) {
         console.error('Error fetching student:', error);
@@ -54,30 +67,19 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const {
-            name,
-            email,
-            phone,
-            course,
-            academic_year,
-            gender,
-            university
-        } = req.body;
+        const updateData = req.body;
 
-        const sql = `
-            UPDATE students 
-            SET name = ?, email = ?, phone = ?, course = ?, 
-                academic_year = ?, gender = ?, university = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `;
-        
-        const result = await run(sql, [
-            name, email, phone, course, academic_year, gender, university, id
-        ]);
+        const docRef = db.collection('users').doc(id);
+        const doc = await docRef.get();
 
-        if (result.changes === 0) {
+        if (!doc.exists) {
             return res.status(404).json({ success: false, message: 'Student not found' });
         }
+
+        await docRef.update({
+            ...updateData,
+            updated_at: new Date().toISOString()
+        });
 
         res.json({
             success: true,
@@ -93,29 +95,14 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        
-        // Check if student has any bookings or allotments
-        const bookingsSql = 'SELECT COUNT(*) as count FROM pg_bookings WHERE student_id = (SELECT student_id FROM students WHERE id = ?)';
-        const allotmentsSql = 'SELECT COUNT(*) as count FROM hostel_allotments WHERE student_id = (SELECT student_id FROM students WHERE id = ?)';
-        
-        const [bookings, allotments] = await Promise.all([
-            get(bookingsSql, [id]),
-            get(allotmentsSql, [id])
-        ]);
-        
-        if (bookings.count > 0 || allotments.count > 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Cannot delete student with existing bookings or allotments' 
-            });
-        }
-        
-        const sql = 'DELETE FROM students WHERE id = ?';
-        const result = await run(sql, [id]);
-        
-        if (result.changes === 0) {
+        const docRef = db.collection('users').doc(id);
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
             return res.status(404).json({ success: false, message: 'Student not found' });
         }
+
+        await docRef.delete();
 
         res.json({
             success: true,
@@ -130,72 +117,37 @@ router.delete('/:id', async (req, res) => {
 // Get student statistics
 router.get('/stats/overview', async (req, res) => {
     try {
-        const statsSql = `
-            SELECT 
-                COUNT(*) as total_students,
-                COUNT(CASE WHEN course = 'Computer Science' THEN 1 END) as cs_students,
-                COUNT(CASE WHEN course = 'Engineering' THEN 1 END) as engineering_students,
-                COUNT(CASE WHEN academic_year = '1st Year' THEN 1 END) as first_year,
-                COUNT(CASE WHEN academic_year = '2nd Year' THEN 1 END) as second_year,
-                COUNT(CASE WHEN academic_year = '3rd Year' THEN 1 END) as third_year,
-                COUNT(CASE WHEN academic_year = '4th Year' THEN 1 END) as fourth_year
-            FROM students
-        `;
-        const stats = await get(statsSql);
-        
+        const snapshot = await db.collection('users').get();
+        let total = 0, cs = 0, eng = 0, y1 = 0, y2 = 0, y3 = 0, y4 = 0;
+
+        snapshot.forEach(doc => {
+            total++;
+            const data = doc.data();
+            const course = (data.course || '').toLowerCase();
+            if (course.includes('computer') || course.includes('cs')) cs++;
+            else if (course.includes('engineer')) eng++;
+
+            const year = (data.academicYear || data.academic_year || '').toLowerCase();
+            if (year.includes('1st') || year.includes('first')) y1++;
+            else if (year.includes('2nd') || year.includes('second')) y2++;
+            else if (year.includes('3rd') || year.includes('third')) y3++;
+            else if (year.includes('4th') || year.includes('fourth')) y4++;
+        });
+
         res.json({
             success: true,
-            data: stats
+            data: {
+                total_students: total,
+                cs_students: cs,
+                engineering_students: eng,
+                first_year: y1,
+                second_year: y2,
+                third_year: y3,
+                fourth_year: y4
+            }
         });
     } catch (error) {
         console.error('Error fetching student stats:', error);
-        res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
-    }
-});
-
-// Get student's booking history
-router.get('/:id/bookings', async (req, res) => {
-    try {
-        const { id } = req.params;
-        
-        const sql = `
-            SELECT 
-                'hostel' as type,
-                ha.id,
-                ha.status,
-                ha.created_at,
-                h.name as property_name,
-                h.area,
-                h.price_per_month
-            FROM hostel_allotments ha
-            JOIN hostels h ON ha.hostel_id = h.id
-            WHERE ha.student_id = (SELECT student_id FROM students WHERE id = ?)
-            
-            UNION ALL
-            
-            SELECT 
-                'pg' as type,
-                pb.id,
-                pb.status,
-                pb.created_at,
-                p.name as property_name,
-                p.area,
-                p.price_per_month
-            FROM pg_bookings pb
-            JOIN pgs p ON pb.pg_id = p.id
-            WHERE pb.student_id = (SELECT student_id FROM students WHERE id = ?)
-            
-            ORDER BY created_at DESC
-        `;
-        
-        const bookings = await query(sql, [id, id]);
-        
-        res.json({
-            success: true,
-            data: bookings
-        });
-    } catch (error) {
-        console.error('Error fetching student bookings:', error);
         res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
     }
 });

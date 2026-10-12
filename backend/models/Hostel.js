@@ -1,4 +1,4 @@
-const { query, get, run } = require('../config/sqlite-database');
+const { db } = require('../config/firebase');
 
 class Hostel {
     constructor(data) {
@@ -19,33 +19,40 @@ class Hostel {
     // Get all hostels
     static async getAll(filters = {}) {
         try {
-            let sqlQuery = 'SELECT * FROM hostels WHERE is_active = 1';
-            const values = [];
+            const snapshot = await db.collection('hostels').get();
+            let hostels = [];
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.is_active !== 0 && data.is_active !== false) {
+                    hostels.push({
+                        id: doc.id,
+                        ...data,
+                        available_rooms: Number(data.available_rooms || 0),
+                        total_rooms: Number(data.total_rooms || 0),
+                        price_per_month: data.price_per_month !== undefined ? String(data.price_per_month) : "0"
+                    });
+                }
+            });
 
             // Apply filters
             if (filters.area) {
-                sqlQuery += ' AND area = ?';
-                values.push(filters.area);
+                hostels = hostels.filter(h => h.area && h.area.toLowerCase() === filters.area.toLowerCase());
             }
 
-            if (filters.min_price) {
-                sqlQuery += ' AND price_per_month >= ?';
-                values.push(filters.min_price);
+            if (filters.min_price !== undefined) {
+                hostels = hostels.filter(h => parseFloat(h.price_per_month || 0) >= filters.min_price);
             }
 
-            if (filters.max_price) {
-                sqlQuery += ' AND price_per_month <= ?';
-                values.push(filters.max_price);
+            if (filters.max_price !== undefined) {
+                hostels = hostels.filter(h => parseFloat(h.price_per_month || 0) <= filters.max_price);
             }
 
             if (filters.available_rooms) {
-                sqlQuery += ' AND available_rooms > 0';
+                hostels = hostels.filter(h => Number(h.available_rooms || 0) > 0);
             }
 
-            sqlQuery += ' ORDER BY created_at DESC';
-
-            const rows = await query(sqlQuery, values);
-            return rows;
+            return hostels;
         } catch (error) {
             throw new Error(`Error getting hostels: ${error.message}`);
         }
@@ -54,9 +61,22 @@ class Hostel {
     // Get hostel by ID
     static async getById(id) {
         try {
-            const sqlQuery = 'SELECT * FROM hostels WHERE id = ?';
-            const row = await get(sqlQuery, [id]);
-            return row || null;
+            // First try direct document ID
+            const doc = await db.collection('hostels').doc(String(id)).get();
+            if (doc.exists) {
+                return { id: doc.id, ...doc.data() };
+            }
+
+            // Fallback: search all hostels
+            const snapshot = await db.collection('hostels').get();
+            let found = null;
+            snapshot.forEach(d => {
+                const data = d.data();
+                if (d.id === String(id) || String(data.id) === String(id)) {
+                    found = { id: d.id, ...data };
+                }
+            });
+            return found;
         } catch (error) {
             throw new Error(`Error getting hostel: ${error.message}`);
         }
@@ -65,9 +85,7 @@ class Hostel {
     // Get hostels by area
     static async getByArea(area) {
         try {
-            const sqlQuery = 'SELECT * FROM hostels WHERE area = ? AND is_active = 1 ORDER BY created_at DESC';
-            const rows = await query(sqlQuery, [area]);
-            return rows;
+            return await this.getAll({ area });
         } catch (error) {
             throw new Error(`Error getting hostels by area: ${error.message}`);
         }
@@ -76,26 +94,23 @@ class Hostel {
     // Create new hostel
     static async create(hostelData) {
         try {
-            const sqlQuery = `
-                INSERT INTO hostels (name, location, area, available_rooms, total_rooms, 
-                                   price_per_month, amenities, contact_number, description)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `;
-            
-            const values = [
-                hostelData.name,
-                hostelData.location,
-                hostelData.area,
-                hostelData.available_rooms || 0,
-                hostelData.total_rooms || 0,
-                hostelData.price_per_month,
-                hostelData.amenities,
-                hostelData.contact_number,
-                hostelData.description
-            ];
+            const dataToSave = {
+                name: hostelData.name || '',
+                location: hostelData.location || '',
+                area: hostelData.area || '',
+                available_rooms: Number(hostelData.available_rooms || 0),
+                total_rooms: Number(hostelData.total_rooms || 0),
+                price_per_month: String(hostelData.price_per_month || 0),
+                amenities: hostelData.amenities || '',
+                contact_number: hostelData.contact_number || '',
+                description: hostelData.description || '',
+                is_active: hostelData.is_active !== undefined ? hostelData.is_active : 1,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
 
-            const result = await run(sqlQuery, values);
-            return { id: result.insertId, ...hostelData };
+            const docRef = await db.collection('hostels').add(dataToSave);
+            return { id: docRef.id, ...dataToSave };
         } catch (error) {
             throw new Error(`Error creating hostel: ${error.message}`);
         }
@@ -104,30 +119,21 @@ class Hostel {
     // Update hostel
     static async update(id, updateData) {
         try {
-            const allowedFields = [
-                'name', 'location', 'area', 'available_rooms', 'total_rooms',
-                'price_per_month', 'amenities', 'contact_number', 'description'
-            ];
-            
-            const updateFields = [];
-            const values = [];
+            const hostel = await this.getById(id);
+            if (!hostel) return false;
 
-            for (const [key, value] of Object.entries(updateData)) {
-                if (allowedFields.includes(key) && value !== undefined) {
-                    updateFields.push(`${key} = ?`);
-                    values.push(value);
-                }
-            }
+            const docRef = db.collection('hostels').doc(hostel.id);
+            const dataToUpdate = {
+                ...updateData,
+                updated_at: new Date().toISOString()
+            };
 
-            if (updateFields.length === 0) {
-                throw new Error('No valid fields to update');
-            }
+            if (dataToUpdate.available_rooms !== undefined) dataToUpdate.available_rooms = Number(dataToUpdate.available_rooms);
+            if (dataToUpdate.total_rooms !== undefined) dataToUpdate.total_rooms = Number(dataToUpdate.total_rooms);
+            if (dataToUpdate.price_per_month !== undefined) dataToUpdate.price_per_month = String(dataToUpdate.price_per_month);
 
-            values.push(id);
-            const sqlQuery = `UPDATE hostels SET ${updateFields.join(', ')}, updated_at = datetime('now') WHERE id = ?`;
-            
-            const result = await run(sqlQuery, values);
-            return result.changes > 0;
+            await docRef.update(dataToUpdate);
+            return true;
         } catch (error) {
             throw new Error(`Error updating hostel: ${error.message}`);
         }
@@ -136,9 +142,14 @@ class Hostel {
     // Delete hostel (soft delete)
     static async delete(id) {
         try {
-            const sqlQuery = 'UPDATE hostels SET is_active = 0 WHERE id = ?';
-            const result = await run(sqlQuery, [id]);
-            return result.changes > 0;
+            const hostel = await this.getById(id);
+            if (!hostel) return false;
+
+            await db.collection('hostels').doc(hostel.id).update({
+                is_active: 0,
+                updated_at: new Date().toISOString()
+            });
+            return true;
         } catch (error) {
             throw new Error(`Error deleting hostel: ${error.message}`);
         }
@@ -147,33 +158,14 @@ class Hostel {
     // Search hostels
     static async search(searchTerm, filters = {}) {
         try {
-            let sqlQuery = `
-                SELECT * FROM hostels 
-                WHERE is_active = 1 
-                AND (name LIKE ? OR location LIKE ? OR area LIKE ? OR description LIKE ?)
-            `;
-            const values = [`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`];
-
-            // Apply additional filters
-            if (filters.area) {
-                sqlQuery += ' AND area = ?';
-                values.push(filters.area);
-            }
-
-            if (filters.min_price) {
-                sqlQuery += ' AND price_per_month >= ?';
-                values.push(filters.min_price);
-            }
-
-            if (filters.max_price) {
-                sqlQuery += ' AND price_per_month <= ?';
-                values.push(filters.max_price);
-            }
-
-            sqlQuery += ' ORDER BY created_at DESC';
-
-            const rows = await query(sqlQuery, values);
-            return rows;
+            const hostels = await this.getAll(filters);
+            const term = searchTerm.toLowerCase();
+            return hostels.filter(h =>
+                (h.name && h.name.toLowerCase().includes(term)) ||
+                (h.location && h.location.toLowerCase().includes(term)) ||
+                (h.area && h.area.toLowerCase().includes(term)) ||
+                (h.description && h.description.toLowerCase().includes(term))
+            );
         } catch (error) {
             throw new Error(`Error searching hostels: ${error.message}`);
         }
@@ -182,9 +174,9 @@ class Hostel {
     // Get available areas
     static async getAreas() {
         try {
-            const sqlQuery = 'SELECT DISTINCT area FROM hostels WHERE is_active = 1 ORDER BY area';
-            const rows = await query(sqlQuery, []);
-            return rows.map(row => row.area);
+            const hostels = await this.getAll();
+            const areas = [...new Set(hostels.map(h => h.area).filter(Boolean))];
+            return areas.sort();
         } catch (error) {
             throw new Error(`Error getting areas: ${error.message}`);
         }

@@ -1,6 +1,6 @@
 const express = require('express');
 const PG = require('../models/PG');
-const { db } = require('../config/sqlite-database');
+const { db } = require('../config/firebase');
 const router = express.Router();
 
 // Get all PGs with optional filters
@@ -154,9 +154,8 @@ router.get('/genders/list', async (req, res) => {
 // Create PG booking request
 router.post('/book', async (req, res) => {
     try {
-        const { student_id, property_id, property_type, special_requests } = req.body;
+        const { student_id, property_id, property_type, special_requests, student_name, contact, email, move_in_date, duration } = req.body;
 
-        // Validate required fields
         if (!student_id || !property_id || !property_type) {
             return res.status(400).json({
                 success: false,
@@ -164,7 +163,6 @@ router.post('/book', async (req, res) => {
             });
         }
 
-        // Verify the PG exists
         const pg = await PG.getById(property_id);
         if (!pg) {
             return res.status(404).json({
@@ -173,40 +171,38 @@ router.post('/book', async (req, res) => {
             });
         }
 
-        // Check if PG has available spots
-        if (pg.available_spots <= 0) {
+        if (Number(pg.available_spots || 0) <= 0) {
             return res.status(400).json({
                 success: false,
                 message: 'No spots available in this PG'
             });
         }
 
-        // Create booking record in database
-        const query = `
-            INSERT INTO pg_bookings 
-            (student_id, pg_id, status, special_requirements, created_at) 
-            VALUES (?, ?, 'pending', ?, datetime('now'))
-        `;
-        
-        const result = await new Promise((resolve, reject) => {
-            db.run(query, [student_id, property_id, special_requests || ''], function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve({ insertId: this.lastID });
-                }
-            });
-        });
-        
+        const bookingData = {
+            student_id,
+            student_name: student_name || 'Student',
+            contact: contact || '',
+            email: email || '',
+            move_in_date: move_in_date || '',
+            duration: duration || '1 Month',
+            property_id: pg.id,
+            pg_id: pg.id,
+            property_name: pg.name,
+            pg_name: pg.name,
+            property_type: 'pg',
+            status: 'pending',
+            special_requests: special_requests || '',
+            created_at: new Date().toISOString()
+        };
+
+        const docRef = await db.collection('bookings').add(bookingData);
+
         res.status(201).json({
             success: true,
             message: 'PG booking request submitted successfully',
             data: {
-                id: result.insertId,
-                student_id,
-                pg_id: property_id,
-                status: 'pending',
-                special_requests: special_requests || ''
+                id: docRef.id,
+                ...bookingData
             }
         });
 
@@ -225,7 +221,6 @@ router.post('/', async (req, res) => {
     try {
         const pgData = req.body;
 
-        // Validate required fields
         if (!pgData.name || !pgData.location || !pgData.area) {
             return res.status(400).json({
                 success: false,
@@ -313,5 +308,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
-
-
